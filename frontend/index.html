@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dispatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #121212;
+    --line: #333;
+    --line-dim: #222;
+    --amber: #ffb300;
+    --amber-dim: #6b4d00;
+    --text: #d8d4c8;
+    --muted: #66625a;
+    --red: #e0483e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 22px 32px 18px;
+    border-bottom: 3px double var(--line);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--amber);
+  }
+  .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+  .clock {
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+  }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .compose {
+    padding: 28px 28px 28px 32px;
+    border-right: 1px solid var(--line-dim);
+  }
+  .panel-head {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+  .field { margin-bottom: 15px; }
+  .field label {
+    display: block;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  input, textarea {
+    width: 100%;
+    padding: 8px 9px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    font-size: 13px;
+    font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--amber); }
+  textarea { resize: vertical; min-height: 64px; }
+  ::placeholder { color: #444; }
+
+  button.dispatch {
+    width: 100%;
+    margin-top: 8px;
+    background: transparent;
+    color: var(--amber);
+    border: 1px solid var(--amber);
+    padding: 10px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+  }
+  button.dispatch:hover { background: var(--amber); color: #000; }
+
+  .content { padding: 28px 32px; }
+
+  .board-tabs {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 4px;
+  }
+  .board-tab {
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; padding: 6px 0;
+    color: var(--muted); font-size: 12px; letter-spacing: 0.1em;
+  }
+  .board-tab.active { color: var(--amber); }
+  .board-tab .n { color: inherit; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  thead tr { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  th {
+    text-align: left; font-size: 10.5px; font-weight: 500;
+    color: var(--muted); letter-spacing: 0.1em; padding: 9px 10px;
+  }
+  td { padding: 11px 10px; font-size: 12.5px; border-bottom: 1px solid var(--line-dim); }
+  tr.row:hover td { background: #151310; }
+
+  .flag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+  }
+  .flag.scheduled { color: var(--amber); }
+  .flag.sent { color: #6fbf73; }
+  .flag.failed { color: var(--red); }
+
+  .empty {
+    color: var(--muted);
+    font-size: 12.5px;
+    padding: 30px 10px;
+    text-align: center;
+    border: 1px dashed var(--line);
+    margin-top: 12px;
+  }
+
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--panel); border: 1px solid var(--amber);
+    color: var(--amber); padding: 10px 16px;
+    font-size: 12px; letter-spacing: 0.05em; display: none;
+  }
+  #toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="title">DISPATCH</div>
+    <div class="subtitle">EMAIL SCHEDULING &amp; DELIVERY</div>
+  </div>
+  <div class="clock" id="clock"></div>
+</header>
+
+<div class="layout">
+  <div class="compose">
+    <p class="panel-head">— NEW DISPATCH —</p>
+    <div class="field"><label>SENDER</label><input id="sender" value="default" /></div>
+    <div class="field"><label>TO</label><input id="to" placeholder="recipient@example.com" /></div>
+    <div class="field"><label>SUBJECT</label><input id="subject" placeholder="—" /></div>
+    <div class="field"><label>BODY</label><textarea id="body" placeholder="—"></textarea></div>
+    <div class="field"><label>DEPARTS AT</label><input id="scheduledAt" type="datetime-local" /></div>
+    <button class="dispatch" onclick="schedule()">▸ QUEUE DISPATCH</button>
+  </div>
+
+  <div class="content">
+    <div class="board-tabs">
+      <button class="board-tab active" data-tab="scheduled" onclick="switchTab('scheduled')">SCHEDULED <span class="n" id="scheduledCount">[0]</span></button>
+      <button class="board-tab" data-tab="sent" onclick="switchTab('sent')">DEPARTED <span class="n" id="sentCount">[0]</span></button>
+    </div>
+    <div id="pane-scheduled"></div>
+    <div id="pane-sent" style="display:none"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = "http://localhost:4000/api/emails";
+
+function tick() {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+tick(); setInterval(tick, 1000);
+
+function toast(msg, isError) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = isError ? "error" : "";
+  el.style.display = "block";
+  setTimeout(() => (el.style.display = "none"), 2600);
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".board-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.getElementById("pane-scheduled").style.display = name === "scheduled" ? "block" : "none";
+  document.getElementById("pane-sent").style.display = name === "sent" ? "block" : "none";
+}
+
+async function schedule() {
+  const raw = document.getElementById("scheduledAt").value;
+  if (!raw) { toast("SET A DEPARTURE TIME", true); return; }
+
+  const payload = {
+    sender: document.getElementById("sender").value || "default",
+    to: document.getElementById("to").value,
+    subject: document.getElementById("subject").value,
+    body: document.getElementById("body").value,
+    scheduledAt: new Date(raw).toISOString(),
+  };
+
+  try {
+    const res = await fetch(`${API}/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || "DISPATCH FAILED");
+    toast("QUEUED");
+    document.getElementById("to").value = "";
+    document.getElementById("subject").value = "";
+    document.getElementById("body").value = "";
+    loadAll();
+  } catch (e) {
+    toast(e.message.toUpperCase(), true);
+  }
+}
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function renderScheduled(rows) {
+  const pane = document.getElementById("pane-scheduled");
+  document.getElementById("scheduledCount").textContent = `[${rows.length}]`;
+  if (!rows.length) {
+    pane.innerHTML = `<div class="empty">NO DISPATCHES QUEUED</div>`;
+    return;
+  }
+  pane.innerHTML = `
+    <table>
+      <thead><tr><th>TO</th><th>SUBJECT</th><th>DEPARTS</th><th>STATUS</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr class="row">
+            <td>${r.to_email}</td>
+            <td>${r.subject}</td>
+            <td>${fmtTime(r.scheduled_at)}</td>
+            <td><span class="flag scheduled">SCHEDULED</span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderSent(rows) {
+  const pane = document.getElementById("pane-sent");
+  document.getElementById("sentCount").textContent = `[${rows.length}]`;
+  if (!rows.length) {
+    pane.innerHTML = `<div class="empty">NO DEPARTURES YET</div>`;
+    return;
+  }
+  pane.innerHTML = `
+    <table>
+      <thead><tr><th>TO</th><th>SUBJECT</th><th>DEPARTED</th><th>STATUS</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr class="row">
+            <td>${r.to_email}</td>
+            <td>${r.subject}</td>
+            <td>${fmtTime(r.sent_at)}</td>
+            <td><span class="flag ${r.status}">${r.status.toUpperCase()}</span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function loadAll() {
+  try {
+    const [scheduled, sent] = await Promise.all([
+      fetch(`${API}/scheduled`).then(r => r.json()),
+      fetch(`${API}/sent`).then(r => r.json()),
+    ]);
+    renderScheduled(scheduled);
+    renderSent(sent);
+  } catch (e) {}
+}
+
+loadAll();
+setInterval(loadAll, 4000);
+</script>
+</body>
+</html>
